@@ -135,10 +135,11 @@ ava('resolveModel honours OPENAI_BASE_URL when set', async t => {
             t.fail('Expected model object, got string')
             return
         }
-        // A custom-baseURL provider still reports the same provider/model ids;
-        // the point is that construction succeeds rather than falling back to
-        // the pinned api.openai.com singleton.
-        t.is(model.provider, 'openai.chat')
+        // The point is that construction succeeds against the custom baseURL
+        // rather than falling back to the pinned api.openai.com singleton.
+        // Don't pin the exact provider id — @ai-sdk/openai reports
+        // 'openai.responses' or 'openai.chat' depending on the model path.
+        t.true(model.provider.startsWith('openai'))
         t.is(model.modelId, 'gpt-4')
     } finally {
         if (originalBase === undefined) delete process.env.OPENAI_BASE_URL
@@ -163,7 +164,7 @@ ava('resolveModel is unchanged when no base URL is set', async t => {
             t.fail('Expected model object, got string')
             return
         }
-        t.is(model.provider, 'openai.chat')
+        t.true(model.provider.startsWith('openai'))
     } finally {
         if (originalBase === undefined) delete process.env.OPENAI_BASE_URL
         else process.env.OPENAI_BASE_URL = originalBase
