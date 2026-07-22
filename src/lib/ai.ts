@@ -2,6 +2,7 @@ import { openai, createOpenAI } from '@ai-sdk/openai'
 import { anthropic, createAnthropic } from '@ai-sdk/anthropic'
 import { google, createGoogleGenerativeAI } from '@ai-sdk/google'
 import { xai, createXai } from '@ai-sdk/xai'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 // import { openrouter } from '@openrouter/ai-sdk-provider' // TODO: Update when v5-compatible version is available
 // Import AI SDK functions from our local wrapper for mocking
 import * as aiSdk from 'ai';
@@ -49,7 +50,7 @@ export interface AiObservabilityEvents {
 export const aiObservability = new EventEmitter();
 
 // Type for supported AI providers
-type AIProvider = 'openai' | 'anthropic' | 'google' | 'xai'; // | 'openrouter'; // TODO: Re-enable when v5-compatible
+type AIProvider = 'openai' | 'anthropic' | 'google' | 'xai' | 'custom'; // | 'openrouter'; // TODO: Re-enable when v5-compatible
 
 // ModelFactory type and PROVIDERS map
 type ModelFactory = (id: string) => LanguageModel;
@@ -58,7 +59,27 @@ const PROVIDERS: Record<AIProvider, ModelFactory> = {
     anthropic: anthropic,
     google: google,
     xai: xai,
+    custom: () => {
+        throw new Error(
+            `Provider "custom" requires ${CUSTOM_BASE_URL_ENV} to be set in ~/.kenv/.env`
+        );
+    },
     // openrouter: openrouter // TODO: Re-enable when v5-compatible
+};
+
+// 'custom' is a user-defined OpenAI-compatible endpoint (LiteLLM, Ollama,
+// vLLM, a self-hosted router). Unlike the vendor providers it has no default
+// endpoint, so KIT_AI_CUSTOM_BASE_URL is required when it is selected.
+const CUSTOM_BASE_URL_ENV = 'KIT_AI_CUSTOM_BASE_URL';
+const CUSTOM_API_KEY_ENV = 'KIT_AI_CUSTOM_API_KEY';
+
+const createCustomProvider = (baseURL: string): ModelFactory => {
+    const provider = createOpenAICompatible({
+        name: 'custom',
+        baseURL,
+        apiKey: process.env[CUSTOM_API_KEY_ENV]
+    });
+    return (id: string) => provider(id);
 };
 
 // Optional per-provider base URL overrides, for OpenAI-compatible gateways
@@ -70,6 +91,7 @@ const getProviderBaseUrlEnvVar = (provider: AIProvider): string => {
         anthropic: 'ANTHROPIC_BASE_URL',
         google: 'GOOGLE_BASE_URL',
         xai: 'XAI_BASE_URL',
+        custom: CUSTOM_BASE_URL_ENV,
         // openrouter: 'OPENROUTER_BASE_URL' // TODO: Re-enable when v5-compatible
     };
     return envVars[provider];
@@ -80,6 +102,7 @@ const CUSTOM_PROVIDERS: Record<AIProvider, (baseURL: string) => ModelFactory> = 
     anthropic: (baseURL) => createAnthropic({ baseURL }),
     google: (baseURL) => createGoogleGenerativeAI({ baseURL }),
     xai: (baseURL) => createXai({ baseURL }),
+    custom: (baseURL) => createCustomProvider(baseURL),
     // openrouter: (baseURL) => createOpenRouter({ baseURL }) // TODO: Re-enable when v5-compatible
 };
 
@@ -104,6 +127,7 @@ const getProviderEnvVar = (provider: AIProvider): string => {
         anthropic: 'ANTHROPIC_API_KEY',
         google: 'GOOGLE_API_KEY',
         xai: 'XAI_API_KEY',
+        custom: CUSTOM_API_KEY_ENV,
         // openrouter: 'OPENROUTER_API_KEY' // TODO: Re-enable when v5-compatible
     };
     return envVars[provider];
@@ -116,6 +140,7 @@ const getProviderUrl = (provider: AIProvider): string => {
         anthropic: 'https://console.anthropic.com/settings/keys',
         google: 'https://makersuite.google.com/app/apikey',
         xai: 'https://console.xai.com',
+        custom: '',
         // openrouter: 'https://openrouter.ai/keys' // TODO: Re-enable when v5-compatible
     };
     return urls[provider];
@@ -128,6 +153,7 @@ const getProviderInstructions = (provider: AIProvider): string => {
         anthropic: 'Generate an API key in the Anthropic Console under Settings > Keys',
         google: 'Create an API key in Google AI Studio',
         xai: 'Get your API key from the xAI console',
+        custom: `The API key for your endpoint at ${process.env[CUSTOM_BASE_URL_ENV] ?? 'your custom base URL'}`,
         // openrouter: 'Create an API key at OpenRouter.ai/keys' // TODO: Re-enable when v5-compatible
     };
     return instructions[provider];

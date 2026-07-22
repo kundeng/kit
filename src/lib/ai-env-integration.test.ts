@@ -172,3 +172,48 @@ ava('resolveModel is unchanged when no base URL is set', async t => {
         else process.env.OPENAI_API_KEY = originalKey
     }
 })
+
+ava('custom provider resolves against KIT_AI_CUSTOM_BASE_URL', async t => {
+    const saved = {
+        provider: process.env.KIT_AI_DEFAULT_PROVIDER,
+        base: process.env.KIT_AI_CUSTOM_BASE_URL,
+        key: process.env.KIT_AI_CUSTOM_API_KEY
+    }
+
+    try {
+        process.env.KIT_AI_CUSTOM_BASE_URL = 'http://localhost:20128/v1'
+        process.env.KIT_AI_CUSTOM_API_KEY = 'test-key'
+
+        const model = await resolveModel('custom:some-model')
+
+        t.truthy(model)
+        if (typeof model === 'string') {
+            t.fail('Expected model object, got string')
+            return
+        }
+        t.true(model.provider.startsWith('custom'))
+        t.is(model.modelId, 'some-model')
+    } finally {
+        for (const [k, v] of Object.entries({
+            KIT_AI_DEFAULT_PROVIDER: saved.provider,
+            KIT_AI_CUSTOM_BASE_URL: saved.base,
+            KIT_AI_CUSTOM_API_KEY: saved.key
+        })) {
+            if (v === undefined) delete process.env[k]
+            else process.env[k] = v
+        }
+    }
+})
+
+ava('custom provider without a base URL throws a helpful error', async t => {
+    const saved = process.env.KIT_AI_CUSTOM_BASE_URL
+    try {
+        delete process.env.KIT_AI_CUSTOM_BASE_URL
+        process.env.KIT_AI_CUSTOM_API_KEY = 'test-key'
+        await t.throwsAsync(() => resolveModel('custom:some-model'),
+            { message: /KIT_AI_CUSTOM_BASE_URL/ })
+    } finally {
+        if (saved === undefined) delete process.env.KIT_AI_CUSTOM_BASE_URL
+        else process.env.KIT_AI_CUSTOM_BASE_URL = saved
+    }
+})
