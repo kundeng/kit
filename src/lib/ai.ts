@@ -1,7 +1,7 @@
-import { openai } from '@ai-sdk/openai'
-import { anthropic } from '@ai-sdk/anthropic'
-import { google } from '@ai-sdk/google'
-import { xai } from '@ai-sdk/xai'
+import { openai, createOpenAI } from '@ai-sdk/openai'
+import { anthropic, createAnthropic } from '@ai-sdk/anthropic'
+import { google, createGoogleGenerativeAI } from '@ai-sdk/google'
+import { xai, createXai } from '@ai-sdk/xai'
 // import { openrouter } from '@openrouter/ai-sdk-provider' // TODO: Update when v5-compatible version is available
 // Import AI SDK functions from our local wrapper for mocking
 import * as aiSdk from 'ai';
@@ -59,6 +59,35 @@ const PROVIDERS: Record<AIProvider, ModelFactory> = {
     google: google,
     xai: xai,
     // openrouter: openrouter // TODO: Re-enable when v5-compatible
+};
+
+// Optional per-provider base URL overrides, for OpenAI-compatible gateways
+// (LiteLLM, OpenRouter proxies, Ollama, vLLM, corporate proxies). When unset,
+// the default provider singleton is used and behaviour is unchanged.
+const getProviderBaseUrlEnvVar = (provider: AIProvider): string => {
+    const envVars: Record<AIProvider, string> = {
+        openai: 'OPENAI_BASE_URL',
+        anthropic: 'ANTHROPIC_BASE_URL',
+        google: 'GOOGLE_BASE_URL',
+        xai: 'XAI_BASE_URL',
+        // openrouter: 'OPENROUTER_BASE_URL' // TODO: Re-enable when v5-compatible
+    };
+    return envVars[provider];
+};
+
+const CUSTOM_PROVIDERS: Record<AIProvider, (baseURL: string) => ModelFactory> = {
+    openai: (baseURL) => createOpenAI({ baseURL }),
+    anthropic: (baseURL) => createAnthropic({ baseURL }),
+    google: (baseURL) => createGoogleGenerativeAI({ baseURL }),
+    xai: (baseURL) => createXai({ baseURL }),
+    // openrouter: (baseURL) => createOpenRouter({ baseURL }) // TODO: Re-enable when v5-compatible
+};
+
+// Read the env var at call time, not module load, so a script that sets it
+// via env() before its first ai()/assistant() call is still honoured.
+const getProviderFactory = (provider: AIProvider): ModelFactory => {
+    const baseURL = process.env[getProviderBaseUrlEnvVar(provider)];
+    return baseURL ? CUSTOM_PROVIDERS[provider](baseURL) : PROVIDERS[provider];
 };
 
 // Cache environment variables at module load
@@ -154,7 +183,7 @@ export const resolveModel = async (
     await ensureApiKey(targetProvider);
 
     // Create and return the model
-    return PROVIDERS[targetProvider](modelId);
+    return getProviderFactory(targetProvider)(modelId);
 };
 
 // Interface for injectable SDK functions for testability

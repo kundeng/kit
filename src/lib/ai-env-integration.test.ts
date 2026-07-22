@@ -120,3 +120,54 @@ ava('resolveModel should handle explicit provider parameter', async t => {
 //
 // For now, these integration tests verify the basic functionality
 // when API keys are already set.
+ava('resolveModel honours OPENAI_BASE_URL when set', async t => {
+    const originalBase = process.env.OPENAI_BASE_URL
+    const originalKey = process.env.OPENAI_API_KEY
+
+    try {
+        process.env.OPENAI_BASE_URL = 'http://localhost:20128/v1'
+        process.env.OPENAI_API_KEY = 'test-key'
+
+        const model = await resolveModel('gpt-4')
+
+        t.truthy(model)
+        if (typeof model === 'string') {
+            t.fail('Expected model object, got string')
+            return
+        }
+        // A custom-baseURL provider still reports the same provider/model ids;
+        // the point is that construction succeeds rather than falling back to
+        // the pinned api.openai.com singleton.
+        t.is(model.provider, 'openai.chat')
+        t.is(model.modelId, 'gpt-4')
+    } finally {
+        if (originalBase === undefined) delete process.env.OPENAI_BASE_URL
+        else process.env.OPENAI_BASE_URL = originalBase
+        if (originalKey === undefined) delete process.env.OPENAI_API_KEY
+        else process.env.OPENAI_API_KEY = originalKey
+    }
+})
+
+ava('resolveModel is unchanged when no base URL is set', async t => {
+    const originalBase = process.env.OPENAI_BASE_URL
+    const originalKey = process.env.OPENAI_API_KEY
+
+    try {
+        delete process.env.OPENAI_BASE_URL
+        process.env.OPENAI_API_KEY = 'test-key'
+
+        const model = await resolveModel('gpt-4')
+
+        t.truthy(model)
+        if (typeof model === 'string') {
+            t.fail('Expected model object, got string')
+            return
+        }
+        t.is(model.provider, 'openai.chat')
+    } finally {
+        if (originalBase === undefined) delete process.env.OPENAI_BASE_URL
+        else process.env.OPENAI_BASE_URL = originalBase
+        if (originalKey === undefined) delete process.env.OPENAI_API_KEY
+        else process.env.OPENAI_API_KEY = originalKey
+    }
+})
